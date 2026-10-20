@@ -33,6 +33,8 @@ function initNav() {
 }
 
 function navigateTo(page) {
+  if (page === 'matched') page = 'gallery-high';
+  if (page === 'review') page = 'gallery-review';
   currentPage = page;
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -827,11 +829,54 @@ function updateDashboard(s) {
 }
 
 // ─── High-Confidence Gallery ──────────────────────────────────────────────────
+let availableScanJobs = [];
+
+async function populateJobFilter() {
+  try {
+    const jobs = await apiFetch('/api/reports/summary');
+    availableScanJobs = jobs || [];
+    const select = document.getElementById('high-job-filter');
+    if (!select) return;
+
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">All Scans</option>';
+
+    availableScanJobs.forEach(j => {
+      const opt = document.createElement('option');
+      opt.value = j.job_id;
+      const srcName = j.source_folder ? j.source_folder.split(/[\\/]/).filter(Boolean).pop() : 'Scan';
+      opt.textContent = `Job #${j.job_id} — ${srcName} (${j.high_confidence_matches || 0} matches)`;
+      select.appendChild(opt);
+    });
+
+    if (currentJobId && availableScanJobs.some(j => j.job_id == currentJobId)) {
+      select.value = currentJobId;
+    } else if (currentVal && availableScanJobs.some(j => j.job_id == currentVal)) {
+      select.value = currentVal;
+    }
+  } catch (e) {
+    console.debug('Failed to populate job filter:', e);
+  }
+}
+
+function onJobFilterChange() {
+  const select = document.getElementById('high-job-filter');
+  currentJobId = select?.value ? parseInt(select.value) : null;
+  loadHighGallery(1);
+}
+
 async function loadHighGallery(page) {
   highPage = page;
   try {
+    await populateJobFilter();
+
     const params = new URLSearchParams({ page, page_size: PAGE_SIZE });
-    if (currentJobId) params.set('job_id', currentJobId);
+    const select = document.getElementById('high-job-filter');
+    const selectedJob = select?.value || (currentJobId ? String(currentJobId) : '');
+
+    if (selectedJob) {
+      params.set('job_id', selectedJob);
+    }
     const data = await apiFetch(`/api/gallery/high-confidence?${params}`);
 
     document.getElementById('high-total-count').textContent = `${data.total} photos`;
@@ -846,7 +891,7 @@ function renderHighGallery(items) {
   const grid = document.getElementById('high-gallery-grid');
   grid.innerHTML = '';
   if (!items.length) {
-    grid.innerHTML = '<div class="gallery-empty">No high-confidence matches yet.</div>';
+    grid.innerHTML = '<div class="gallery-empty">No high-confidence matches found for this scan. Select another scan from the dropdown above.</div>';
     return;
   }
   items.forEach(item => {
@@ -854,13 +899,10 @@ function renderHighGallery(items) {
     card.className = 'gallery-card';
     card.onclick = () => openPreview(item.image_file_id, item.filename);
 
-    const thumbHtml = item.thumbnail_url
-      ? `<img class="gallery-thumb" src="${item.thumbnail_url}" alt="${item.filename}" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
-      : '';
+    const thumbSrc = item.thumbnail_url || `/api/preview/${item.image_file_id}`;
 
     card.innerHTML = `
-      ${thumbHtml}
-      <div class="gallery-thumb-placeholder" style="${item.thumbnail_url ? 'display:none' : ''}">🖼️</div>
+      <img class="gallery-thumb" src="${thumbSrc}" alt="${item.filename}" loading="lazy" onerror="this.onerror=null; this.src='/api/preview/${item.image_file_id}';">
       <div class="gallery-info">
         <div class="gallery-filename" title="${item.file_path}">${item.filename}</div>
         <div class="gallery-ids">
@@ -1047,27 +1089,44 @@ async function loadJobSummary() {
   try {
     const jobs = await apiFetch('/api/reports/summary');
     const container = document.getElementById('job-summary-table');
-    if (!jobs.length) {
-      container.innerHTML = '<p class="text-muted text-sm">No scan jobs yet.</p>';
+    if (!jobs || !jobs.length) {
+      container.innerHTML = '<p class="text-muted text-sm" style="padding:1rem;">No scan jobs in history.</p>';
       return;
     }
     container.innerHTML = `
-      <table class="job-table">
+      <table class="job-table" style="width:100%; border-collapse:collapse;">
         <thead><tr>
-          <th>Job ID</th><th>Status</th><th>Source</th><th>Total</th>
-          <th>Processed</th><th>Matched</th><th>Review</th><th>Date</th>
+          <th>Job ID</th>
+          <th>Status</th>
+          <th>Source Folder</th>
+          <th>Discovered</th>
+          <th>Processed</th>
+          <th>High Matches</th>
+          <th>Review</th>
+          <th>Date</th>
+          <th style="text-align:center;">Actions</th>
         </tr></thead>
         <tbody>
           ${jobs.map(j => `
             <tr>
-              <td>#${j.job_id}</td>
-              <td><span class="badge badge-${j.status === 'completed' ? 'success' : j.status === 'error' ? 'error' : 'info'}">${j.status}</span></td>
-              <td title="${j.source_folder}">${truncatePath(j.source_folder, 30)}</td>
+              <td><strong>#${j.job_id}</strong></td>
+              <td><span class="badge badge-${j.status === 'completed' ? 'success' : j.status === 'error' ? 'error' : j.status === 'running' ? 'info' : 'warning'}">${j.status}</span></td>
+              <td title="${j.source_folder}"><code style="font-size:0.8rem;">${truncatePath(j.source_folder, 32)}</code></td>
               <td>${j.total_files}</td>
               <td>${j.processed_files}</td>
-              <td>${j.high_confidence_matches}</td>
-              <td>${j.review_candidates}</td>
+              <td><span style="font-weight:600; color:var(--green);">${j.high_confidence_matches || 0}</span></td>
+              <td>${j.review_candidates || 0}</td>
               <td>${j.created_at ? new Date(j.created_at).toLocaleDateString() : '—'}</td>
+              <td style="text-align:center; white-space:nowrap;">
+                ${(j.high_confidence_matches > 0) ? `
+                  <button class="btn btn-outline btn-sm" style="padding:2px 8px; font-size:0.75rem; margin-right:4px;" onclick="viewJobMatches(${j.job_id})" title="View Matched Photos">
+                    👁 View (${j.high_confidence_matches})
+                  </button>
+                ` : ''}
+                <button class="btn btn-danger-outline btn-sm" style="padding:2px 8px; font-size:0.75rem;" onclick="deleteJob(${j.job_id})" title="Delete this scan history">
+                  🗑️
+                </button>
+              </td>
             </tr>
           `).join('')}
         </tbody>
@@ -1075,6 +1134,57 @@ async function loadJobSummary() {
     `;
   } catch (e) {
     console.error('Jobs load failed:', e);
+  }
+}
+
+function viewJobMatches(jobId) {
+  currentJobId = jobId;
+  navigateTo('gallery-high');
+  const select = document.getElementById('high-job-filter');
+  if (select) {
+    select.value = String(jobId);
+  }
+  loadHighGallery(1);
+}
+
+async function deleteJob(jobId) {
+  if (!confirm(`Are you sure you want to delete scan history for Job #${jobId}?`)) return;
+  try {
+    const res = await apiFetch(`/api/reports/jobs/${jobId}`, 'DELETE');
+    if (res.success) {
+      showToast(`✓ Scan Job #${jobId} deleted.`, 'success');
+      loadJobSummary();
+      updateScanStatus();
+    }
+  } catch (e) {
+    showToast(`Failed to delete job: ${e.message}`, 'error');
+  }
+}
+
+async function cleanEmptyJobs() {
+  try {
+    const res = await apiFetch('/api/reports/jobs/clean-empty', 'POST');
+    showToast(`✓ Removed ${res.deleted_count || 0} empty / pending jobs from history.`, 'success');
+    loadJobSummary();
+    updateScanStatus();
+  } catch (e) {
+    showToast(`Failed to clean jobs: ${e.message}`, 'error');
+  }
+}
+
+async function clearAllJobs() {
+  if (!confirm('Are you sure you want to completely clear all scan history? (This resets scan records and gallery classifications, but never touches source or exported photos).')) return;
+  try {
+    const res = await apiFetch('/api/reports/jobs/clear-all', 'POST');
+    if (res.success) {
+      showToast('✓ All scan history and classifications cleared.', 'success');
+      currentJobId = null;
+      loadJobSummary();
+      updateScanStatus();
+      if (currentPage === 'gallery-high') loadHighGallery(1);
+    }
+  } catch (e) {
+    showToast(`Failed to clear history: ${e.message}`, 'error');
   }
 }
 

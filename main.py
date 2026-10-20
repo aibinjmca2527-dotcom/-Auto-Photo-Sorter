@@ -809,11 +809,14 @@ async def cancel_scan():
 
 
 @app.get("/api/scan/status")
-async def get_scan_status():
+async def get_scan_status(db: Session = Depends(get_db_dep)):
     state = scan_state.to_dict()
     mem = psutil.virtual_memory()
     state["memory_available_mb"] = mem.available // (1024 * 1024)
     state["memory_percent"] = mem.percent
+    if state["status"] != "running":
+        state["high_confidence_matches"] = db.query(ImageClassification).filter_by(classification="high_confidence").count()
+        state["review_candidates"] = db.query(ImageClassification).filter_by(classification="review_candidate", manual_reviewed=False).count()
     return state
 
 
@@ -823,13 +826,17 @@ def _build_image_card(img: ImageFile, cls: ImageClassification, db: Session) -> 
     """Build a gallery card dict for one image."""
     matched_ids = json.loads(cls.matched_identities) if cls.matched_identities else []
 
-    # Thumbnail: find first face thumbnail for this image
+    # Thumbnail: find first face thumbnail for this image, or fallback to downscaled image preview
     thumb_url = None
     face = db.query(FaceDetection).filter_by(image_file_id=img.id).first()
     if face:
-        thumb_path = os.path.join(THUMBNAIL_DIR, f"{img.id}_0.jpg")
+        thumb_path = os.path.join(THUMBNAIL_DIR, f"{img.id}_{face.face_index}.jpg")
         if os.path.isfile(thumb_path):
-            thumb_url = f"/thumbnails/{img.id}_0.jpg"
+            thumb_url = f"/thumbnails/{img.id}_{face.face_index}.jpg"
+
+    # Fallback to dynamic image preview endpoint so every card always displays a real photo
+    if not thumb_url:
+        thumb_url = f"/api/preview/{img.id}"
 
     return {
         "image_file_id": img.id,
@@ -1118,6 +1125,45 @@ async def list_jobs(db: Session = Depends(get_db_dep)):
     ]
 
 
+@app.delete("/api/reports/jobs/{job_id}")
+async def delete_job_endpoint(job_id: int, db: Session = Depends(get_db_dep)):
+    """Delete a specific scan job and its associated records."""
+    job = db.query(ScanJob).filter_by(id=job_id).first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    db.query(ImageClassification).filter_by(job_id=job_id).delete()
+    img_ids = [r[0] for r in db.query(ImageFile.id).filter_by(job_id=job_id).all()]
+    if img_ids:
+        db.query(MatchResult).filter(MatchResult.image_file_id.in_(img_ids)).delete(synchronize_session=False)
+        db.query(FaceDetection).filter(FaceDetection.image_file_id.in_(img_ids)).delete(synchronize_session=False)
+    db.query(ImageFile).filter_by(job_id=job_id).delete()
+    db.delete(job)
+    db.commit()
+    return {"success": True, "deleted_job_id": job_id}
+
+
+@app.post("/api/reports/jobs/clean-empty")
+async def clean_empty_jobs(db: Session = Depends(get_db_dep)):
+    """Remove empty pending/stale scan jobs with 0 files."""
+    deleted = db.query(ScanJob).filter(ScanJob.total_files == 0, ScanJob.status.in_(["pending", "cancelled"])).delete(synchronize_session=False)
+    db.commit()
+    return {"success": True, "deleted_count": deleted}
+
+
+@app.post("/api/reports/jobs/clear-all")
+async def clear_all_jobs(db: Session = Depends(get_db_dep)):
+    """Purge all scan history and cached classifications."""
+    db.query(ImageClassification).delete()
+    db.query(MatchResult).delete()
+    db.query(FaceDetection).delete()
+    db.query(ImageFile).delete()
+    db.query(ScanJob).delete()
+    db.commit()
+    scan_state.reset()
+    return {"success": True}
+
+
 # ─── Clear cached data ────────────────────────────────────────────────────────
 
 @app.post("/api/cache/clear-embeddings")
@@ -1128,6 +1174,8 @@ async def clear_embeddings(db: Session = Depends(get_db_dep)):
     db.query(ImageClassification).delete()
     db.query(ImageFile).update({"status": "pending"})
     db.commit()
+    scan_state.high_confidence_matches = 0
+    scan_state.review_candidates = 0
     return {"success": True, "message": "All cached face data cleared. Re-scan to rebuild."}
 
 

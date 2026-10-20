@@ -1008,7 +1008,7 @@ body {
             <button class="btn btn-outline" id="btn-pause" onclick="pauseScan()">⏸ Pause</button>
             <button class="btn btn-outline hidden" id="btn-resume" onclick="resumeScan()">▶ Resume</button>
             <button class="btn btn-danger" id="btn-cancel" onclick="cancelScan()">⏹ Stop Scan</button>
-            <button class="btn btn-primary hidden" id="btn-view-matches" onclick="navigateTo('matched')">👁 View Matched Photos</button>
+            <button class="btn btn-primary hidden" id="btn-view-matches" onclick="navigateTo('gallery-high')">👁 View Matched Photos</button>
             <button class="btn btn-outline hidden" id="btn-new-scan" onclick="navigateTo('setup')">↺ Start New Scan</button>
           </div>
         </div>
@@ -1093,7 +1093,13 @@ body {
           <p class="page-subtitle" id="gallery-high-subtitle">Photos where family members were recognized with high confidence.</p>
         </div>
         <div class="gallery-toolbar">
-          <span class="gallery-count" id="high-total-count">0 photos</span>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <label style="font-size:0.85rem; color:var(--text-muted); font-weight:500;">Filter by Scan:</label>
+            <select id="high-job-filter" class="form-select" style="padding:4px 10px; font-size:0.85rem; width:auto; min-width:200px;" onchange="onJobFilterChange()">
+              <option value="">All Scans</option>
+            </select>
+            <span class="gallery-count" id="high-total-count">0 photos</span>
+          </div>
           <div class="gallery-pagination" id="high-pagination"></div>
         </div>
         <div class="gallery-grid" id="high-gallery-grid">
@@ -1134,9 +1140,13 @@ body {
 
         <!-- Job summary -->
         <div class="card">
-          <div class="card-header">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <h3>Scan History</h3>
-            <button class="btn btn-outline btn-sm" onclick="loadJobSummary()">Refresh</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-outline btn-sm" onclick="loadJobSummary()">⟳ Refresh</button>
+              <button class="btn btn-outline btn-sm" onclick="cleanEmptyJobs()">🧹 Clean Empty Jobs</button>
+              <button class="btn btn-danger-outline btn-sm" onclick="clearAllJobs()">🗑️ Clear All History</button>
+            </div>
           </div>
           <div id="job-summary-table"></div>
         </div>
