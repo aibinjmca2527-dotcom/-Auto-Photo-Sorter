@@ -102,33 +102,19 @@ git clone https://github.com/aibinjmca2527-dotcom/-Auto-Photo-Sorter.git
 cd -Auto-Photo-Sorter
 ```
 
-### 2. Run Automated Setup
-Double-click `setup.bat` or run:
-```bash
-setup.bat
-```
-This script will:
-- Verify Python version (3.10+ recommended) and `pip`.
-- Install dependencies from `requirements.txt`.
-- Set up ONNX Runtime with GPU acceleration (or fallback to CPU).
-- Download the InsightFace `buffalo_l` face recognition model weights.
-- Run `setup_check.py` to confirm model and database integrity.
-
-*Manual Pip Install alternative:*
-```bash
-pip install -r requirements.txt
-python setup_check.py
-```
-
-### 3. Launch the Application
-Double-click `launch.bat` or run:
+### 2. 1-Click Launch (Fully Automated)
+Simply double-click **`launch.bat`** (or run `python launcher.py`):
 ```bash
 launch.bat
 ```
-The FastAPI server will start and automatically launch your default browser at:
-```
-http://127.0.0.1:8000
-```
+The smart launcher will automatically:
+1. Verify Python and auto-install any missing dependencies from `requirements.txt`.
+2. Check and pre-download the InsightFace `buffalo_l` model weights (~300 MB) on first run.
+3. Automatically detect and allocate an available port (handling any port conflicts seamlessly).
+4. Launch the local FastAPI server and open your default browser automatically.
+
+*(Optional)* You can also run `setup.bat` independently if you wish to run a dedicated environment setup step.
+
 
 ---
 
@@ -201,6 +187,7 @@ AI_PHOTO FINDER/
 ├── create_test_dataset.py  # Benchmark test dataset generator with synthetic faces
 ├── tests.py                # Comprehensive automated unit and integration tests
 ├── requirements.txt        # Python package dependencies
+├── launcher.py             # Smart 1-click launcher (auto-install, model check, dynamic port)
 ├── setup.bat               # Windows one-click environment installer
 ├── launch.bat              # Windows one-click application launcher
 ├── .gitignore              # Privacy protection ignoring all images, DBs, and media
