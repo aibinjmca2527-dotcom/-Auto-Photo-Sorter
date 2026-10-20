@@ -63,3 +63,6 @@ temp/
 *.secret
 *.key
 *.pem
+
+# Local PDF documentation (Private - not tracked in git)
+*.pdf
