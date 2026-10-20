@@ -1,0 +1,65 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# SQLite Database & Storage (Contains personal embeddings & scan history)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# User & Personal Media (CRITICAL PRIVACY: NEVER COMMIT ANY PERSONAL IMAGES)
+reference_photos/
+thumbnails/
+test_dataset/
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.bmp
+*.gif
+*.tif
+*.tiff
+*.raw
+*.cr2
+*.nef
+*.arw
+*.dng
+
+# Log files
+*.log
+logs/
+
+# Python virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# IDE & Editor configuration
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Environment variables & secrets
+.env
+.env.*
+*.secret
+*.key
+*.pem
